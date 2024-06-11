@@ -181,14 +181,15 @@ async def check_ans(message: Message, state: FSMContext):
         if user_ans.lower() == answers[cur-1].lower():
             correct = random.choice(correct_msg)
             await message.answer(text=correct)
+            if cur == len(answers):
+                await load_final(message, state)
+            else:
+                await state.update_data({"current": cur + 1})
+                await load_step(message, state)
         else:
             wrong = random.choice(wrong_msg)
             await message.answer(text=wrong)
-        if cur == len(answers):
-            await load_final(message, state)
-        else:
-            await state.update_data({"current": cur + 1})
-            await load_step(message, state)
+
 
 
 async def load_final(message: Message, state: FSMContext):
