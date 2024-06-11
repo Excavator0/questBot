@@ -38,7 +38,7 @@ async def main():
     dp.include_router(run_handlers.router)
 
     bot_commands = [
-        BotCommand(command="/start", description="Главное меню")
+        BotCommand(command="/menu", description="Главное меню")
     ]
     await bot.set_my_commands(bot_commands)
 

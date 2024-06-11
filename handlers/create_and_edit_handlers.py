@@ -3,7 +3,7 @@ from aiogram import Router, F
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery, ContentType
 from aiogram.fsm.context import FSMContext
-
+from aiogram.utils.deep_linking import create_start_link
 from database.db import Database
 from messages import *
 from keyboards.create_keyboards import *
@@ -325,8 +325,9 @@ async def save_to_db(callback: CallbackQuery, state: FSMContext):
             "VALUES (?, ?, ?, ?, ?, ?)", (data["id"], i + 1, texts[i], answers[i], contents[i], hints[i]))
     db.conn.commit()
     db.close()
+    link = await create_start_link(callback.bot, quest_id)
     await callback.message.answer(
-        text=quest_saved
+        text=(quest_saved + "\nСсылка на квест: " + link)
     )
     await state.clear()
 
@@ -714,3 +715,11 @@ async def delete_quest(callback: CallbackQuery, state: FSMContext):
     db.close()
     await callback.message.answer(text=f"Квест {quest_id} удален!")
     await state.clear()
+
+
+@router.callback_query(F.data == "get_link")
+async def get_link(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    quest_id = data["id"]
+    link = await create_start_link(callback.bot, quest_id)
+    await callback.message.edit_text(text=link)

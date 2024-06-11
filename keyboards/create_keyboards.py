@@ -64,14 +64,18 @@ def final_keyboard(locked):
         callback_data="lock_quest"
     ))
     builder.add(InlineKeyboardButton(
-        text="Сохранить квест",
-        callback_data="quest_done"
+        text="Ссылка на квест",
+        callback_data="get_link"
     ))
     builder.add(InlineKeyboardButton(
         text="Удалить квест",
         callback_data="delete_quest"
     ))
-    builder.adjust(2, 2, 2, 2)
+    builder.add(InlineKeyboardButton(
+        text="Сохранить квест",
+        callback_data="quest_done"
+    ))
+    builder.adjust(2, 2, 2, 2, 1)
     return builder
 
 

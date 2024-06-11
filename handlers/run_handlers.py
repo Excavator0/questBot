@@ -1,4 +1,5 @@
 from aiogram import Router, F
+from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
@@ -41,6 +42,46 @@ async def get_id(callback: CallbackQuery, state: FSMContext):
         text=get_id_text
     )
     await state.set_state(RunnerStep.num)
+
+
+@router.message(CommandStart(deep_link=True))
+async def start_with_id(message: Message, command: CommandObject, state: FSMContext):
+    quest_id = command.args
+    db = Database("database/quests.db")
+    db.cursor.execute("SELECT * FROM quests WHERE quest_id = ?", (quest_id,))
+    row = db.cursor.fetchone()
+    if row[3] is not None:
+        if row[3] == 1:
+            await message.answer("Автор закрыл доступ к этому квесту.")
+        else:
+            correct_msg = row[8].split(";")
+            wrong_msg = row[9].split(";")
+            for i in range(len(correct_msg)):
+                correct_msg[i] = correct_msg[i].strip()
+            for i in range(len(wrong_msg)):
+                wrong_msg[i] = wrong_msg[i].strip()
+            await state.update_data({"desc": row[5], "final": row[6], "final_content": row[7],
+                                     "correct_msg": correct_msg, "wrong_msg": wrong_msg})
+            await message.answer(text=row[5])
+
+            db.cursor.execute("SELECT * FROM steps WHERE quest_id = ? ORDER BY num", (quest_id,))
+            rows = db.cursor.fetchall()
+            texts = []
+            contents = []
+            answers = []
+            hints = []
+            for row in rows:
+                texts.append(row[3])
+                answers.append(row[4])
+                contents.append(row[5])
+                hints.append(row[6])
+            await state.update_data({"texts":texts, "ans": answers, "contents": contents,
+                                     "hints": hints, "current": 1})
+            await load_step(message, state)
+    else:
+        await message.answer("Квест был удален")
+    db.conn.commit()
+    db.close()
 
 
 @router.message(RunnerStep.num)

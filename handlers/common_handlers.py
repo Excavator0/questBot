@@ -12,7 +12,7 @@ class Quest(StatesGroup):
     id = State()
 
 
-@router.message(Command("start"))
+@router.message(Command("menu"))
 async def cmd_start(message: Message):
     await message.answer(
         text=hello_message,
