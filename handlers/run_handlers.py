@@ -50,7 +50,7 @@ async def start_with_id(message: Message, command: CommandObject, state: FSMCont
     db = Database("database/quests.db")
     db.cursor.execute("SELECT * FROM quests WHERE quest_id = ?", (quest_id,))
     row = db.cursor.fetchone()
-    if row[3] is not None:
+    if row is not None:
         if row[3] == 1:
             await message.answer("Автор закрыл доступ к этому квесту.")
         else:
@@ -75,7 +75,7 @@ async def start_with_id(message: Message, command: CommandObject, state: FSMCont
                 answers.append(row[4])
                 contents.append(row[5])
                 hints.append(row[6])
-            await state.update_data({"texts":texts, "ans": answers, "contents": contents,
+            await state.update_data({"texts": texts, "ans": answers, "contents": contents,
                                      "hints": hints, "current": 1})
             await load_step(message, state)
     else:
@@ -91,7 +91,7 @@ async def load_quest_from_db(message: Message, state: FSMContext):
         db = Database("database/quests.db")
         db.cursor.execute("SELECT * FROM quests WHERE quest_id = ?", (quest_id,))
         row = db.cursor.fetchone()
-        if row[3] is not None:
+        if row is not None:
             if row[3] == 1:
                 await message.answer("Автор закрыл доступ к этому квесту.")
             else:
@@ -116,7 +116,7 @@ async def load_quest_from_db(message: Message, state: FSMContext):
                     answers.append(row[4])
                     contents.append(row[5])
                     hints.append(row[6])
-                await state.update_data({"texts":texts, "ans": answers, "contents": contents,
+                await state.update_data({"texts": texts, "ans": answers, "contents": contents,
                                          "hints": hints, "current": 1})
                 await load_step(message, state)
         else:
@@ -132,17 +132,17 @@ async def load_step(message: Message, state: FSMContext):
     cur = data["current"]
     texts = data["texts"]
     contents = data["contents"]
-    if contents[cur-1] is None:
+    if contents[cur - 1] is None:
         await message.answer(
-            text=texts[cur-1],
+            text=texts[cur - 1],
             reply_markup=run_keyboard().as_markup()
         )
     else:
-        content_type = contents[cur-1][contents[cur-1].find(":")+1:]
+        content_type = contents[cur - 1][contents[cur - 1].find(":") + 1:]
         if content_type == "video":
             await message.answer_video(
-                video=contents[cur-1][:contents[cur-1].find(":")],
-                caption=texts[cur-1],
+                video=contents[cur - 1][:contents[cur - 1].find(":")],
+                caption=texts[cur - 1],
                 reply_markup=run_keyboard().as_markup()
             )
         elif content_type == "photo":
@@ -173,12 +173,14 @@ async def check_ans(message: Message, state: FSMContext):
         await state.clear()
         await main_menu(message)
     elif user_ans == "Подсказка":
-        if hints[cur-1] is None:
+        if hints[cur - 1] is None:
             await message.answer(text=no_hint)
         else:
-            await message.answer(text=hints[cur-1])
+            await message.answer(text=hints[cur - 1])
     else:
-        if user_ans.lower() == answers[cur-1].lower():
+        if user_ans is None:
+            await message.answer(text="Введите ответ текстом!")
+        if user_ans.lower() == answers[cur - 1].lower():
             correct = random.choice(correct_msg)
             await message.answer(text=correct)
             if cur == len(answers):
@@ -189,7 +191,6 @@ async def check_ans(message: Message, state: FSMContext):
         else:
             wrong = random.choice(wrong_msg)
             await message.answer(text=wrong)
-
 
 
 async def load_final(message: Message, state: FSMContext):

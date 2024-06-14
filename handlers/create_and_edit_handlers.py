@@ -51,19 +51,29 @@ async def create_new(callback: CallbackQuery, state: FSMContext):
 @router.message(Step.name)
 async def set_quest_name(message: Message, state: FSMContext):
     name = message.text
-    await state.update_data({"name": name})
-    await message.answer(text=set_desc)
-    await state.set_state(Step.desc)
+    if name is None:
+        await message.answer(
+            text="Введите название текстом!"
+        )
+    else:
+        await state.update_data({"name": name})
+        await message.answer(text=set_desc)
+        await state.set_state(Step.desc)
 
 
 @router.message(Step.desc)
 async def set_quest_desc(message: Message, state: FSMContext):
     desc = message.text
-    await state.update_data({"desc": desc})
-    await message.answer(
-        text=new_or_copy_text,
-        reply_markup=copy_or_new_step().as_markup()
-    )
+    if desc is None:
+        await message.answer(
+            text="Введите описание текстом!"
+        )
+    else:
+        await state.update_data({"desc": desc})
+        await message.answer(
+            text=new_or_copy_text,
+            reply_markup=copy_or_new_step().as_markup()
+        )
 
 
 @router.callback_query(F.data == "copy_or_new")
@@ -101,13 +111,13 @@ async def copy_step(message: Message, state: FSMContext):
         db = Database("database/quests.db")
         db.cursor.execute("SELECT * FROM quests WHERE quest_id = ?", (quest_id,))
         row = db.cursor.fetchone()
-        if row[3] is not None:
+        if row is not None:
             if row[3] == 1:
                 await message.answer(text="Автор закрыл доступ к этому квесту.")
             else:
                 db.cursor.execute("SELECT * FROM steps WHERE quest_id = ? AND num = ?", (quest_id, step_num,))
                 row = db.cursor.fetchone()
-                if row[3] is None:
+                if row is None:
                     await message.answer(text="Неверный номер шага")
                 else:
                     texts.append(row[3])
@@ -115,7 +125,7 @@ async def copy_step(message: Message, state: FSMContext):
                     contents.append(row[5])
                     hints.append(row[6])
                     await state.update_data({"texts": texts, "ans": answers, "contents": contents,
-                                             "hints": hints, "current": step_num, "num": step_num})
+                                             "hints": hints, "current": step_num, "num": int(step_num)})
                     await message.answer(
                         text="Шаг успешно скопирован. Выберите следующее действие",
                         reply_markup=after_ans_keyboard().as_markup()
@@ -145,6 +155,8 @@ async def add_next_step(message: Message, state: FSMContext):
                 content_id = message.document.file_id + ":doc"
             step_text = message.caption
         contents.append(content_id)
+        if step_text is None:
+            step_text = ""
         texts.append(step_text)
         await message.answer(
             text=add_ans
@@ -170,7 +182,7 @@ async def add_next_ans(message: Message, state: FSMContext):
         )
     else:
         await message.answer(
-            text="Введите ответ текстом"
+            text="Введите ответ текстом!"
         )
 
 
@@ -201,11 +213,41 @@ async def set_next_step(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "set_final")
 async def set_final(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete_reply_markup()
-    await callback.message.edit_text(
-        text=set_final_text
-    )
-    await state.set_state(Step.final)
+    data = await state.get_data()
+    try:
+        final = data["final"]
+        final_content = data["final_content"]
+        await callback.message.delete_reply_markup()
+        await callback.message.answer(text="Текущий финал: ")
+        if final_content is None:
+            await callback.message.answer(
+                text=final
+            )
+        else:
+            content_type = final_content[final_content.find(":") + 1:]
+            if content_type == "video":
+                await callback.message.answer_video(
+                    video=final_content[:final_content.find(":")],
+                    caption=final
+                )
+            elif content_type == "photo":
+                await callback.message.answer_photo(
+                    photo=final_content[:final_content.find(":")],
+                    caption=final
+                )
+            else:
+                await callback.message.answer_document(
+                    document=final_content[:final_content.find(":")],
+                    caption=final
+                )
+        await callback.message.answer(text="Введите текст финального шага. Можете приложить фото, видео или файл")
+        await state.set_state(Step.edit_final)
+    except KeyError:
+        await callback.message.delete_reply_markup()
+        await callback.message.edit_text(
+            text=set_final_text
+        )
+        await state.set_state(Step.final)
 
 
 @router.message(Step.final)
@@ -224,6 +266,8 @@ async def check_final(message: Message, state: FSMContext):
             else:
                 content_id = message.document.file_id + ":doc"
             final_text = message.caption
+        if final_text is None:
+            final_text = ""
         await message.answer(
             text=out_final(final_text),
             reply_markup=final_keyboard(locked).as_markup()
@@ -255,7 +299,7 @@ async def get_step_by_num(message: Message, state: FSMContext):
     except ValueError:
         isnum = False
     if isnum:
-        if 0 < step_num <= num:
+        if 0 < step_num <= int(num):
             texts = data["texts"]
             contents = data["contents"]
             answers = data["ans"]
@@ -306,30 +350,35 @@ async def get_step_by_num(message: Message, state: FSMContext):
 async def save_to_db(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     data = await state.get_data()
-    db = Database("database/quests.db")
-    quest_id = data["id"]
-    db.cursor.execute("DELETE FROM quests WHERE quest_id = ?", (quest_id,))
-    db.cursor.execute("DELETE FROM steps WHERE quest_id = ?", (quest_id,))
-    db.cursor.execute("INSERT INTO quests (author_id, quest_id, locked, name, desc, final, "
-                      "final_content_id, correct_msg, wrong_msg) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                      (user_id, data["id"], data["locked"], data["name"], data["desc"], data["final"],
-                       data["final_content"], data["correct_msg"], data["wrong_msg"]))
-    texts = data["texts"]
-    answers = data["ans"]
-    contents = data["contents"]
-    hints = data["hints"]
-    for i in range(len(texts)):
-        db.cursor.execute(
-            "INSERT INTO steps (quest_id, num, text, answer, content_id, hint) "
-            "VALUES (?, ?, ?, ?, ?, ?)", (data["id"], i + 1, texts[i], answers[i], contents[i], hints[i]))
-    db.conn.commit()
-    db.close()
-    link = await create_start_link(callback.bot, quest_id)
-    await callback.message.answer(
-        text=(quest_saved + "\nСсылка на квест: " + link)
-    )
-    await state.clear()
+    try:
+        final = data["final"]
+        db = Database("database/quests.db")
+        quest_id = data["id"]
+        db.cursor.execute("DELETE FROM quests WHERE quest_id = ?", (quest_id,))
+        db.cursor.execute("DELETE FROM steps WHERE quest_id = ?", (quest_id,))
+        db.cursor.execute("INSERT INTO quests (author_id, quest_id, locked, name, desc, final, "
+                          "final_content_id, correct_msg, wrong_msg) "
+                          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                          (user_id, data["id"], data["locked"], data["name"], data["desc"], data["final"],
+                           data["final_content"], data["correct_msg"], data["wrong_msg"]))
+        texts = data["texts"]
+        answers = data["ans"]
+        contents = data["contents"]
+        hints = data["hints"]
+        for i in range(len(texts)):
+            db.cursor.execute(
+                "INSERT INTO steps (quest_id, num, text, answer, content_id, hint) "
+                "VALUES (?, ?, ?, ?, ?, ?)", (data["id"], i + 1, texts[i], answers[i], contents[i], hints[i]))
+        db.conn.commit()
+        db.close()
+        link = await create_start_link(callback.bot, quest_id)
+        await callback.message.delete_reply_markup()
+        await callback.message.answer(
+            text=(quest_saved + "\nСсылка на квест: " + link)
+        )
+        await state.clear()
+    except KeyError:
+        await callback.message.answer("Нет финального шага!\nНеобходимо добавить финал")
 
 
 @router.callback_query(F.data == "edit_response")
@@ -477,6 +526,8 @@ async def edit_step_content(message: Message, state: FSMContext):
                 content_id = message.document.file_id + ":doc"
             step_text = message.caption
         contents[cur - 1] = content_id
+        if step_text is None:
+            step_text = ""
         texts[cur - 1] = step_text
         await state.update_data({"texts": texts, "contents": contents})
         await message.answer(
@@ -499,13 +550,19 @@ async def edit_step_content(message: Message, state: FSMContext):
     data = await state.get_data()
     cur = data["current"]
     answers = data["ans"]
-    answer = message.text
-    answers[cur - 1] = answer
-    await state.update_data({"ans": answers})
-    await message.answer(
-        text="Ответ изменен. Выберите следующее действие",
-        reply_markup=edit_step().as_markup()
-    )
+    if message.content_type == ContentType.TEXT:
+        answer = message.text
+        answers[cur - 1] = answer
+        await state.update_data({"ans": answers})
+        await state.set_state(Step.hints)
+        await message.answer(
+            text="Ответ изменен. Выберите следующее действие",
+            reply_markup=edit_step().as_markup()
+        )
+    else:
+        await message.answer(
+            text="Введите ответ текстом!"
+        )
 
 
 @router.callback_query(F.data == "edit_step_hint")
@@ -573,38 +630,6 @@ async def edit_desc(message: Message, state: FSMContext):
     )
 
 
-@router.callback_query(F.data == "edit_final")
-async def get_final_content(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete_reply_markup()
-    data = await state.get_data()
-    final = data["final"]
-    final_content = data["final_content"]
-    await callback.message.answer(text="Текущий финал: ")
-    if final_content is None:
-        await callback.message.answer(
-            text=final
-        )
-    else:
-        content_type = final_content[final_content.find(":") + 1:]
-        if content_type == "video":
-            await callback.message.answer_video(
-                video=final_content[:final_content.find(":")],
-                caption=final
-            )
-        elif content_type == "photo":
-            await callback.message.answer_photo(
-                photo=final_content[:final_content.find(":")],
-                caption=final
-            )
-        else:
-            await callback.message.answer_document(
-                document=final_content[:final_content.find(":")],
-                caption=final
-            )
-    await callback.message.answer(text="Введите текст финального шага. Можете приложить фото, видео или файл")
-    await state.set_state(Step.edit_final)
-
-
 @router.message(Step.edit_final)
 async def edit_final_content(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -669,7 +694,7 @@ async def copy_by_id(message: Message, state: FSMContext):
         db = Database("database/quests.db")
         db.cursor.execute("SELECT * FROM quests WHERE quest_id = ?", (quest_id,))
         row = db.cursor.fetchone()
-        if row[3] is not None:
+        if row is not None:
             if row[3] == 1:
                 await message.answer("Автор закрыл доступ к этому квесту.")
             else:

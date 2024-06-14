@@ -45,7 +45,7 @@ def final_keyboard(locked):
     ))
     builder.add(InlineKeyboardButton(
         text="Изменить контент финала",
-        callback_data="edit_final"
+        callback_data="set_final"
     ))
     builder.add(InlineKeyboardButton(
         text="Перейти к шагу по номеру",
@@ -103,7 +103,7 @@ def edit_step():
     ))
     builder.add(InlineKeyboardButton(
         text="Перейти к финальному шагу",
-        callback_data="edit_final"
+        callback_data="set_final"
     ))
     builder.add(InlineKeyboardButton(
         text="Сохранить квест",
