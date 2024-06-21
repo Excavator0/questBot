@@ -378,7 +378,11 @@ async def save_to_db(callback: CallbackQuery, state: FSMContext):
         )
         await state.clear()
     except KeyError:
-        await callback.message.answer("Нет финального шага!\nНеобходимо добавить финал")
+        await callback.message.delete_reply_markup()
+        await callback.message.edit_text(
+            text="Нет финального шага!\nНеобходимо добавить финал",
+            reply_markup=edit_step().as_markup()
+        )
 
 
 @router.callback_query(F.data == "edit_response")
