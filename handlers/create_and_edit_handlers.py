@@ -110,6 +110,7 @@ async def copy_step(message: Message, state: FSMContext):
         contents = data["contents"]
         hints = data["hints"]
         current = data["current"]
+        num = data["num"]
         db = Database("database/quests.db")
         db.cursor.execute("SELECT * FROM quests WHERE quest_id = ?", (quest_id,))
         row = db.cursor.fetchone()
@@ -127,8 +128,9 @@ async def copy_step(message: Message, state: FSMContext):
                     contents.append(row[5])
                     hints.append(row[6])
                     current = current + 1
+                    num = num + 1
                     await state.update_data({"texts": texts, "ans": answers, "contents": contents,
-                                             "hints": hints, "current": current, "num": current-1})
+                                             "hints": hints, "current": current, "num": num})
                     await message.answer(
                         text="Шаг успешно скопирован. Выберите следующее действие",
                         reply_markup=after_ans_keyboard().as_markup()
@@ -316,12 +318,11 @@ async def get_step_by_num(message: Message, state: FSMContext):
     except ValueError:
         isnum = False
     if isnum:
-        if 0 < step_num < int(num):
+        if 0 < step_num <= int(num):
             texts = data["texts"]
             contents = data["contents"]
             answers = data["ans"]
             hints = data["hints"]
-            current = data["current"]
             await message.answer(
                 text=f"Текст шага {step_num}:\n{texts[step_num - 1]}"
             )
@@ -352,8 +353,6 @@ async def get_step_by_num(message: Message, state: FSMContext):
                     text="Подсказки для этого шага нет \n\nВыберите следующее действие",
                     reply_markup=edit_step().as_markup()
                 )
-            current = current + 1
-            await state.update_data({"current": current})
         else:
             await message.answer(
                 text="Неверное значение шага\n" + get_step_text
@@ -511,7 +510,7 @@ async def load_quest(callback: CallbackQuery, state: FSMContext):
         contents.append(row[5])
         hints.append(row[6])
     await state.update_data({"texts": texts, "ans": answers, "contents": contents,
-                             "hints": hints, "current": len(rows) + 1, "num": len(rows), "id": quest_id})
+                             "hints": hints, "current": len(rows), "num": len(rows), "id": quest_id})
     await callback.message.delete_reply_markup()
     await callback.message.edit_text(
         text=edit_quest_text(quest_id),
@@ -738,7 +737,7 @@ async def copy_by_id(message: Message, state: FSMContext):
                     contents.append(row[5])
                     hints.append(row[6])
                 await state.update_data({"texts": texts, "ans": answers, "contents": contents,
-                                         "hints": hints, "current": len(rows) + 1, "num": len(rows)})
+                                         "hints": hints, "current": len(rows), "num": len(rows)})
                 await message.answer(
                     text=copied_quest_text(quest_id, new_quest_id),
                     reply_markup=final_keyboard(locked).as_markup()
