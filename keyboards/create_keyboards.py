@@ -22,7 +22,7 @@ def after_ans_keyboard():
         callback_data="copy_or_new"
     ))
     builder.add(InlineKeyboardButton(
-        text="Добавить финальный шаг",
+        text="Добавить/изменить финальный шаг",
         callback_data="set_final"
     ))
     builder.add(InlineKeyboardButton(
@@ -72,10 +72,14 @@ def final_keyboard(locked):
         callback_data="delete_quest"
     ))
     builder.add(InlineKeyboardButton(
+        text="Добавить еще один шаг",
+        callback_data="copy_or_new"
+    ))
+    builder.add(InlineKeyboardButton(
         text="Сохранить квест",
         callback_data="quest_done"
     ))
-    builder.adjust(2, 2, 2, 2, 1)
+    builder.adjust(2, 2, 2, 2, 1, 1)
     return builder
 
 
@@ -103,13 +107,17 @@ def edit_step():
     ))
     builder.add(InlineKeyboardButton(
         text="Перейти к финальному шагу",
-        callback_data="set_final"
+        callback_data="get_final"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="Добавить следующий шаг",
+        callback_data="copy_or_new"
     ))
     builder.add(InlineKeyboardButton(
         text="Сохранить квест",
         callback_data="quest_done"
     ))
-    builder.adjust(2, 2, 2, 1)
+    builder.adjust(2, 2, 2, 1, 1)
     return builder
 
 
@@ -117,13 +125,31 @@ def after_rm_keyboard():
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
         text="Добавить/изменить финальный шаг",
-        callback_data="set_final"
+        callback_data="get_final"
     ))
     builder.add(InlineKeyboardButton(
         text="Перейти к шагу по номеру",
         callback_data="get_step"
     ))
     builder.adjust(1, 1)
+    return builder
+
+
+def no_final_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Добавить финал",
+        callback_data="set_final"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="Перейти к шагу по номеру",
+        callback_data="get_step"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="Добавить следующий шаг",
+        callback_data="copy_or_new"
+    ))
+    builder.adjust(2, 1)
     return builder
 
 

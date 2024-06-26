@@ -43,7 +43,8 @@ async def create_new(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=new_quest(quest_id)
     )
-    await state.set_data({"num": 0, "texts": [], "ans": [], "final": "", "id": quest_id, "correct_msg": "Правильно!",
+    await state.set_data({"num": 0, "current": 0, "texts": [], "ans": [], "final": "", "id": quest_id,
+                          "correct_msg": "Правильно!",
                           "wrong_msg": "Ответ неверный!", "contents": [], "locked": 0, "hints": []})
     await state.set_state(Step.name)
 
@@ -108,6 +109,7 @@ async def copy_step(message: Message, state: FSMContext):
         answers = data["ans"]
         contents = data["contents"]
         hints = data["hints"]
+        current = data["current"]
         db = Database("database/quests.db")
         db.cursor.execute("SELECT * FROM quests WHERE quest_id = ?", (quest_id,))
         row = db.cursor.fetchone()
@@ -124,8 +126,9 @@ async def copy_step(message: Message, state: FSMContext):
                     answers.append(row[4])
                     contents.append(row[5])
                     hints.append(row[6])
+                    current = current + 1
                     await state.update_data({"texts": texts, "ans": answers, "contents": contents,
-                                             "hints": hints, "current": step_num, "num": int(step_num)})
+                                             "hints": hints, "current": current, "num": current-1})
                     await message.answer(
                         text="Шаг успешно скопирован. Выберите следующее действие",
                         reply_markup=after_ans_keyboard().as_markup()
@@ -204,19 +207,24 @@ async def add_hint(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "next_step")
 async def set_next_step(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    current = data["current"]
     await callback.message.delete_reply_markup()
+    current = current + 1
     await callback.message.edit_text(
-        text=next_step_text
+        text=f"Введите текст шага {current}. Можете приложить фото, видео или файл"
     )
+    await state.update_data({"current": current})
     await state.set_state(Step.num)
 
 
-@router.callback_query(F.data == "set_final")
-async def set_final(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data == "get_final")
+async def get_final(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     try:
         final = data["final"]
         final_content = data["final_content"]
+        locked = data["locked"]
         await callback.message.delete_reply_markup()
         await callback.message.answer(text="Текущий финал: ")
         if final_content is None:
@@ -240,14 +248,23 @@ async def set_final(callback: CallbackQuery, state: FSMContext):
                     document=final_content[:final_content.find(":")],
                     caption=final
                 )
-        await callback.message.answer(text="Введите текст финального шага. Можете приложить фото, видео или файл")
-        await state.set_state(Step.edit_final)
+        await callback.message.answer(
+            text="Выберите следующее действие",
+            reply_markup=final_keyboard(locked).as_markup()
+        )
     except KeyError:
         await callback.message.delete_reply_markup()
         await callback.message.edit_text(
-            text=set_final_text
+            text="Финал пока не установлен",
+            reply_markup=no_final_keyboard().as_markup()
         )
-        await state.set_state(Step.final)
+
+
+@router.callback_query(F.data == "set_final")
+async def set_final(callback: CallbackQuery, state: FSMContext):
+    await callback.message.delete_reply_markup()
+    await callback.message.edit_text(text="Введите текст финального шага. Можете приложить фото, видео или файл")
+    await state.set_state(Step.edit_final)
 
 
 @router.message(Step.final)
@@ -299,11 +316,12 @@ async def get_step_by_num(message: Message, state: FSMContext):
     except ValueError:
         isnum = False
     if isnum:
-        if 0 < step_num <= int(num):
+        if 0 < step_num < int(num):
             texts = data["texts"]
             contents = data["contents"]
             answers = data["ans"]
             hints = data["hints"]
+            current = data["current"]
             await message.answer(
                 text=f"Текст шага {step_num}:\n{texts[step_num - 1]}"
             )
@@ -334,8 +352,8 @@ async def get_step_by_num(message: Message, state: FSMContext):
                     text="Подсказки для этого шага нет \n\nВыберите следующее действие",
                     reply_markup=edit_step().as_markup()
                 )
-            await state.update_data({"current": step_num})
-            await state.set_state(Step.current)
+            current = current + 1
+            await state.update_data({"current": current})
         else:
             await message.answer(
                 text="Неверное значение шага\n" + get_step_text
@@ -429,12 +447,11 @@ async def delete_step(callback: CallbackQuery, state: FSMContext):
     hints = data["hints"]
     current = data["current"]
     num = data["num"]
-    locked = data["locked"]
     if len(texts) == 1:
         await callback.message.delete_reply_markup()
         await callback.message.edit_text(
             text="В квесте должен быть хотя бы один шаг!",
-            reply_markup=final_keyboard(locked).as_markup()
+            reply_markup=edit_step().as_markup()
         )
     else:
         texts.pop(current - 1)
@@ -494,7 +511,7 @@ async def load_quest(callback: CallbackQuery, state: FSMContext):
         contents.append(row[5])
         hints.append(row[6])
     await state.update_data({"texts": texts, "ans": answers, "contents": contents,
-                             "hints": hints, "current": 1, "num": len(rows), "id": quest_id})
+                             "hints": hints, "current": len(rows) + 1, "num": len(rows), "id": quest_id})
     await callback.message.delete_reply_markup()
     await callback.message.edit_text(
         text=edit_quest_text(quest_id),
@@ -506,8 +523,10 @@ async def load_quest(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "edit_step_text")
 async def get_step_content(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    current = data["current"]
     await callback.message.delete_reply_markup()
-    await callback.message.answer(text="Введите текст шага. Можете приложить фото, видео или файл")
+    await callback.message.answer(text=f"Введите текст шага {current}. Можете приложить фото, видео или файл")
     await state.set_state(Step.edit_step)
 
 
@@ -719,7 +738,7 @@ async def copy_by_id(message: Message, state: FSMContext):
                     contents.append(row[5])
                     hints.append(row[6])
                 await state.update_data({"texts": texts, "ans": answers, "contents": contents,
-                                         "hints": hints, "current": 1, "num": len(rows)})
+                                         "hints": hints, "current": len(rows) + 1, "num": len(rows)})
                 await message.answer(
                     text=copied_quest_text(quest_id, new_quest_id),
                     reply_markup=final_keyboard(locked).as_markup()
